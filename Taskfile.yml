@@ -1,0 +1,7 @@
+version: "3"
+
+tasks:
+  tdd:
+    desc: TDD test watcher
+    cmds:
+      - gotestsum --watch-clear --watch ./...
