@@ -1,4 +1,4 @@
-module github.com/jeffwinkler/copytree
+module github.com/winkler1/copytree
 
 go 1.25.6
 

@@ -5,7 +5,7 @@ A CLI tool to copy files based on glob patterns, only when source is newer.
 ## Install
 
 ```bash
-go install github.com/jeffwinkler/copytree@latest
+go install github.com/winkler1/copytree@latest
 ```
 
 ## Usage
