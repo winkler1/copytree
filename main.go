@@ -6,12 +6,15 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/fsnotify/fsnotify"
 )
 
 //go:embed copytree.example.toml
@@ -26,8 +29,18 @@ type Config struct {
 func main() {
 	force := flag.Bool("force", false, "overwrite even if target is newer")
 	verbose := flag.Bool("v", false, "verbose output")
+	watch := flag.Bool("watch", false, "watch config file for changes")
 	configFile := flag.String("config", "copytree.toml", "config file path")
 	flag.Parse()
+
+	if *watch {
+		if _, err := os.Stat(*configFile); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "error: config file %s not found\n", *configFile)
+			os.Exit(1)
+		}
+		watchConfig(*configFile, *force, *verbose)
+		return
+	}
 
 	cfg, err := loadConfig(*configFile)
 	if err != nil {
@@ -62,7 +75,7 @@ func loadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("destination is required in config")
 	}
 	if len(cfg.Globs) == 0 {
-		cfg.Globs = []string{"**/*"}
+		return nil, fmt.Errorf("globs is empty - nothing to copy")
 	}
 	return &cfg, nil
 }
@@ -96,6 +109,7 @@ func copyTree(cfg *Config, force, verbose bool) error {
 			}
 		}
 	}
+	cleanDSStore(cfg.Destination, verbose)
 	return nil
 }
 
@@ -146,6 +160,21 @@ func copyFile(src, dst string, srcInfo os.FileInfo, force, verbose bool) (bool, 
 	return true, nil
 }
 
+func cleanDSStore(root string, verbose bool) {
+	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if info.Name() == ".DS_Store" {
+			if verbose {
+				fmt.Printf("deleted: %s\n", path)
+			}
+			os.Remove(path)
+		}
+		return nil
+	})
+}
+
 func offerCreateConfig(path string) bool {
 	fmt.Printf("No %s found. Create one? [y/N] ", path)
 	reader := bufio.NewReader(os.Stdin)
@@ -159,4 +188,54 @@ func offerCreateConfig(path string) bool {
 		return false
 	}
 	return true
+}
+
+func watchConfig(configFile string, force, verbose bool) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer watcher.Close()
+
+	if err := watcher.Add(configFile); err != nil {
+		log.Fatal(err)
+	}
+
+	runCopy := func() {
+		fmt.Print("\033[2J\033[H")
+		fmt.Printf("[%s] Config changed, running copy...\n\n", time.Now().Format("15:04:05"))
+		defer fmt.Println("\nWatching for changes...")
+		cfg, err := loadConfig(configFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)
+			return
+		}
+		fmt.Printf("Source:      %s\n", cfg.Source)
+		fmt.Printf("Destination: %s\n", cfg.Destination)
+		fmt.Printf("Globs:       %v\n\n", cfg.Globs)
+		if err := copyTree(cfg, force, true); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		}
+	}
+
+	runCopy()
+
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
+				time.Sleep(100 * time.Millisecond)
+				watcher.Add(configFile)
+				runCopy()
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Println("error:", err)
+		}
+	}
 }

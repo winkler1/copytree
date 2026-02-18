@@ -4,8 +4,8 @@ source = "/path/to/source"
 destination = "/path/to/destination"
 
 # Glob patterns for files to copy (relative to source)
-globs = [
-    "*.txt",
-    "*.go",
-    "subdir/*.json",
-]
+# globs = [
+#     "*.txt",
+#     "*.go",
+#     "subdir/*.json",
+# ]
