@@ -1,15 +1,21 @@
 package main
 
 import (
+	"bufio"
+	_ "embed"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/bmatcuk/doublestar/v4"
 )
+
+//go:embed copytree.example.toml
+var exampleConfig []byte
 
 type Config struct {
 	Source      string   `toml:"source"`
@@ -25,6 +31,12 @@ func main() {
 
 	cfg, err := loadConfig(*configFile)
 	if err != nil {
+		if os.IsNotExist(err) && *configFile == "copytree.toml" {
+			if offerCreateConfig(*configFile) {
+				fmt.Printf("Created %s - edit it and run again\n", *configFile)
+				os.Exit(0)
+			}
+		}
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -36,6 +48,9 @@ func main() {
 }
 
 func loadConfig(path string) (*Config, error) {
+	if _, err := os.Stat(path); err != nil {
+		return nil, err
+	}
 	var cfg Config
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to read config: %w", err)
@@ -129,4 +144,19 @@ func copyFile(src, dst string, srcInfo os.FileInfo, force, verbose bool) (bool, 
 	}
 
 	return true, nil
+}
+
+func offerCreateConfig(path string) bool {
+	fmt.Printf("No %s found. Create one? [y/N] ", path)
+	reader := bufio.NewReader(os.Stdin)
+	answer, _ := reader.ReadString('\n')
+	if strings.TrimSpace(strings.ToLower(answer)) != "y" {
+		return false
+	}
+	content := strings.TrimPrefix(string(exampleConfig), "# Example copytree configuration\n\n")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create config: %v\n", err)
+		return false
+	}
+	return true
 }
