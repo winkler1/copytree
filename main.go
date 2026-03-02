@@ -97,6 +97,9 @@ func copyTree(cfg *Config, force, verbose bool) error {
 			if srcInfo.IsDir() {
 				continue
 			}
+			if isHidden(relPath) && !globTargetsHidden(pattern) {
+				continue
+			}
 
 			dstPath := filepath.Join(cfg.Destination, relPath)
 
@@ -158,6 +161,27 @@ func copyFile(src, dst string, srcInfo os.FileInfo, force, verbose bool) (bool, 
 	}
 
 	return true, nil
+}
+
+func isHidden(path string) bool {
+	for _, part := range strings.Split(path, string(filepath.Separator)) {
+		if strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	return false
+}
+
+func globTargetsHidden(pattern string) bool {
+	for _, part := range strings.Split(pattern, string(filepath.Separator)) {
+		if part == "**" || part == "*" {
+			continue
+		}
+		if strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	return false
 }
 
 func cleanDSStore(root string, verbose bool) {

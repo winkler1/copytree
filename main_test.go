@@ -45,15 +45,14 @@ globs = ["*.txt", "subdir/*.go"]`
 		assert.ErrorContains(t, err, "destination is required")
 	})
 
-	t.Run("default globs", func(t *testing.T) {
+	t.Run("empty globs errors", func(t *testing.T) {
 		content := `source = "/src"
 destination = "/dst"`
 		err := os.WriteFile(configPath, []byte(content), 0644)
 		assert.NoError(t, err)
 
-		cfg, err := loadConfig(configPath)
-		assert.NoError(t, err)
-		assert.Equal(t, []string{"**/*"}, cfg.Globs)
+		_, err = loadConfig(configPath)
+		assert.ErrorContains(t, err, "globs is empty")
 	})
 }
 
